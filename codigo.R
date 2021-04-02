@@ -147,7 +147,7 @@ Graphic<-function(R){
   print(Grafico)
 }
 
-###################### Função Unbalanced Scott Knott (USK)
+#Função Unbalanced Scott Knott (USK)#####################
 USK<-function(dataset,var1,var2,alpha,graphic,ANOVA){
   if(is.factor(dataset[[var2]])==FALSE){
     stop('The argument "var2" must be factor')
@@ -187,10 +187,18 @@ repet<-3 #blocos
 Tratamento<-as.factor(rep(c(paste("trat",seq(1:n))),repet))
 erro<-rnorm(repet*n,0,1)
 y<-mu+taus+erro
+dados2<-data.frame(y,Tratamento) #dados completos
 #Criando 3 missings aleatórios (Sorteando números aleatórios Dist. Uniforme)
 y[round(runif(3,min=1,max=length(y)),0)]<-NA
-dados<-data.frame(y,Tratamento)
-
+dados<-data.frame(y,Tratamento) #dados com missings
+#Vendo aonde tem missing
+dados$y-dados2$y
+library("mice")
+# Imputando os missings
+imputado <- mice(dados)
+dados3 <- complete(imputado)
+#Vendo se imputou "bem"
+dados2$y-dados3$y
 ####Para testar os avisos
 #y não numerico
 dados$y2<-as.character(dados$y)
@@ -226,22 +234,66 @@ simulacao<-function(taus,observacoes,mu,ausentes,mu_erro,sigma_erro,alpha,iterac
     rejeitaH0<-ifelse(length(levels(as.factor(scott$Group)))==grupos,paste0("Grupos=",grupos),"Diferente")
     resultado[i]<-(rejeitaH0)
   }
+  theta=(mean(c(abs(taus)))/(sigma_erro*ausentes))*observacoes
+  print(theta)
+  return(prop.table(table(resultado)))
+}
+#Imputação
+simulacao2<-function(taus,observacoes,mu,ausentes,mu_erro,sigma_erro,alpha,iteracoes,grupos){
+  numero_trat<-length(taus)
+  Treatment<-as.factor(rep(c(seq(1:numero_trat)),observacoes))
+  #ceiling: Arrendonda para cima
+  recebe_NA<-ceiling(observacoes*numero_trat*(ausentes/100))
+  resultado<-c()
+  
+  for(i in 1:iteracoes){
+    erro<-rnorm(observacoes*numero_trat,0,sigma_erro)
+    y<-mu+taus+erro
+    #ceiling: Arrendonda para cima
+    y[ceiling(runif(recebe_NA,min=1,max=length(y)))]<-NA
+    dados<-data.frame(y,Treatment)
+    #Imputando
+    imputado <- mice(dados)
+    dados <- complete(imputado)
+    scott<-data.frame(USK(dados,"y","Treatment",alpha,graphic=F,ANOVA=F))
+    
+    rejeitaH0<-ifelse(length(levels(as.factor(scott$Group)))==grupos,paste0("Grupos=",grupos),"Diferente")
+    resultado[i]<-(rejeitaH0)
+  }
+  theta=(mean(c(abs(taus)))/(sigma_erro*ausentes))*observacoes
+  print(theta)
   return(prop.table(table(resultado)))
 }
 #Erro Tipo I (Rejeitar quando H0 verdadeiro)
-simulacao(taus=c(2,2,-2,-2),
+simulacao(taus=c(rep(0,5),rep(-0,5)),
           #Número de observações (ou blocos) em cada tratamentos
-          observacoes=9,
-          mu=2,
-          ausentes=1, #em porcentagem ("ausentes=1" = 1% de y vai receber NA de forma aleatória"
+          observacoes=10,
+          mu=50,
+          ausentes=3, #em porcentagem ("ausentes=1" = 1% de y vai receber NA de forma aleatória"
           sigma_erro=1,
           #Erro Tipo I
           alpha=0.05,
           #Quantidade de casos a serem avaliados
           iteracoes=100,
           #Exemplo, se taus=([2,2],[-2,-2]) serão 4 tratamentos em 2 grupos
-          grupos=2 
+          grupos=1
+)
+
+simulacao2(taus=c(rep(0,5),rep(-0,5)),
+          #Número de observações (ou blocos) em cada tratamentos
+          observacoes=10,
+          mu=50,
+          ausentes=3, #em porcentagem ("ausentes=1" = 1% de y vai receber NA de forma aleatória"
+          sigma_erro=1,
+          #Erro Tipo I
+          alpha=0.05,
+          #Quantidade de casos a serem avaliados
+          iteracoes=100,
+          #Exemplo, se taus=([2,2],[-2,-2]) serão 4 tratamentos em 2 grupos
+          grupos=1 
 )
 
 #OBS.: Não consegui me livrar da menssagem do dplyr: `summarise()` has grouped output by 'Treatment'. You can override using the `.groups` argument.
 
+theta
+(mean(c(abs(rep(4,5)),abs(rep(-4,5))))/(1*2))*3
